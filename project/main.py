@@ -17,6 +17,11 @@ app.secret_key = os.getenv("SPOTIPY_CLIENT_SECRET")
 TOKEN_INFO = 'token_info'
 yt_apikey = os.getenv("YT_API_KEY")
 
+# Customize these variables
+yt_channel = "exampleChannelHandle"  # Replace with actual YouTube channel handle
+yt_playlist_name = "forSpotify"
+spotify_playlist_name = "fromYoutube"
+
 # Route for Spotify login
 @app.route('/')
 def login():
@@ -48,43 +53,57 @@ def youtube_auth():
     youtube = googleapiclient.discovery.build(
     api_service_name, api_version, developerKey=yt_apikey)
 
-    # YouTube channel handle
-    handle = "exampleChannelHandle"  # Replace with actual channel handle
-
     response = youtube.channels().list(
         part="snippet,contentDetails, statistics, id",
-        forHandle=handle
+        forHandle=yt_channel
     ).execute()
     channel_id = response["items"][0]["id"]
 
     # Fetch playlists and find "forSpotify" playlist
     playlist_id = None
-    response = youtube.playlists().list(
-        part="id,snippet,contentDetails",
-        channelId=channel_id,
-        maxResults=50,
-    ).execute()
+    next_page_token = None
 
-    for pl in response["items"]:
-        if pl["snippet"]["title"] == "forSpotify":
-            playlist_id = pl["id"]
+    while True:
+        response = youtube.playlists().list(
+            part="id,snippet,contentDetails",
+            channelId=channel_id,
+            maxResults=50,
+        ).execute()
+
+        for pl in response["items"]:
+            if pl["snippet"]["title"] == yt_playlist_name:
+                playlist_id = pl["id"]
+                break
+        if playlist_id:
             break
+
+        next_page_token = response.get("nextPageToken")
+        if not next_page_token:
+            break
+
         if not playlist_id:
-            return "No forSpotify playlist found"
+            return "Playlist not found"
     
     # Fetch videos from the "forSpotify" playlist
-    response = youtube.playlistItems().list(
-        part="snippet",
-        playlistId=playlist_id,
-        maxResults=50,
-    ).execute()
-    
     videos = []
+    next_page_token = None
 
-    for video in response["items"]:
-        videos.append(
-            video["snippet"]["title"]
-        )
+    while True:
+        response = youtube.playlistItems().list(
+            part="snippet",
+            playlistId=playlist_id,
+            maxResults=50,
+            pageToken = next_page_token
+        ).execute()
+    
+        for video in response["items"]:
+            videos.append(
+                video["snippet"]["title"]
+            )
+        
+        next_page_token = response.get("nextPageToken")
+        if not next_page_token:
+            break
     
     # Clean video titles
     ch = ['(', '|', '[']
